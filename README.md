@@ -1,25 +1,22 @@
 # Gambit
 
-Real-time multiplayer chess game. No signup required.
-
-## What it does
-
-Create a room with 6-digit code. Share code with friend. Play chess instantly.
+Real-time multiplayer chess game. Create room, share code, play chess.
 
 ## Tech Stack
 
-Frontend: Next.js 14, TypeScript, Tailwind CSS, React Chessboard
-Backend: Express.js, TypeScript, Custom Chess Engine
-Database: In-memory storage
+Frontend: Next.js 14, TypeScript, Tailwind CSS, React Chessboard  
+Backend: Express.js, TypeScript, Custom Chess Engine  
+Storage: In-memory (no database)  
 Real-time: HTTP polling
 
 ## How it works
 
-1. Player 1 creates room, gets unique code
-2. Player 2 joins using code
-3. Game starts automatically
-4. Moves validated by custom chess engine
-5. Real-time updates via HTTP requests
+1. Player creates room, gets 6-digit code
+2. Player shares code with friend
+3. Friend joins using code
+4. Chess game starts automatically
+5. Custom engine validates all moves
+6. Client polls server every 200ms for updates
 
 ## Run locally
 
@@ -42,20 +39,19 @@ Open http://localhost:3000
 
 ## Deploy
 
-Client: Vercel (free)
-Server: Railway (free)
+Client: Vercel (free tier)  
+Server: Railway (free tier)
 
 Connect GitHub repo to both platforms. Auto-deploys on push.
 
 ## Features
 
 - All chess rules implemented
-- Move validation
-- Checkmate detection
-- Player names
-- Mobile responsive
-- No database required
+- Move validation and checkmate detection
+- Player names and room codes
+- Mobile responsive design
+- No authentication required
 
 ## Architecture
 
-Client sends HTTP requests to server. Server validates moves using custom chess engine. Game state stored in memory. Client polls for updates every 200ms.
+Client sends HTTP requests to server. Server validates moves using custom chess engine. Game state stored in memory. Client polls for updates.

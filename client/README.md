@@ -2,7 +2,14 @@
 
 Frontend for the chess game. Built with Next.js 14.
 
-## Quick Start
+## Tech Stack
+
+- Next.js 14 - React framework
+- TypeScript - Type safety
+- Tailwind CSS - Styling
+- React Chessboard - Chess UI component
+
+## Development
 
 ```bash
 npm install
@@ -11,19 +18,12 @@ npm run dev
 
 Open http://localhost:3000
 
-## Production Build
+## Production
 
 ```bash
 npm run build
 npm start
 ```
-
-## Tech Stack
-
-- Next.js 14 - React framework
-- TypeScript - Type safety
-- Tailwind CSS - Styling
-- React Chessboard - Chess UI
 
 ## Environment
 
@@ -37,7 +37,7 @@ Change URL for production deployment.
 
 ## Deploy
 
-Vercel: Connect GitHub repo, auto-deploys
+Vercel: Connect GitHub repo, auto-deploys  
 Netlify: Connect GitHub repo, set build command
 
-Both free.
+Both have free tiers.

@@ -1,4 +1,4 @@
-# 🚀 Gambit Server
+# ♟️ Gambit Server
 
 The backend for our chess game. Handles all game logic and moves.
 

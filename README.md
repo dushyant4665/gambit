@@ -1,93 +1,61 @@
-# ♟️ Gambit - Real-Time Chess Game
+# Gambit
 
-Play chess with your friends online, instantly. No signup needed.
+Real-time multiplayer chess game. No signup required.
 
-## 🚀 What is this?
+## What it does
 
-A multiplayer chess game where:
-- Create a room, share the code with your friend
-- Play chess in real-time 
-- Works on any device (phone, tablet, computer)
-- Built with custom chess engine (no external libraries)
+Create a room with 6-digit code. Share code with friend. Play chess instantly.
 
-## 🎮 How to play?
+## Tech Stack
 
-1. **Create Room**: Enter your name, get a 6-digit code
-2. **Share Code**: Send the code to your friend
-3. **Play Chess**: Friend joins, game starts automatically
-4. **Win**: Checkmate your opponent!
+Frontend: Next.js 14, TypeScript, Tailwind CSS, React Chessboard
+Backend: Express.js, TypeScript, Custom Chess Engine
+Database: In-memory storage
+Real-time: HTTP polling
 
-## 🛠️ Tech Stack
+## How it works
 
-**Frontend**: Next.js 14, TypeScript, Tailwind CSS, React Chessboard
-**Backend**: Express.js, TypeScript, Custom Chess Engine
-**Real-time**: HTTP polling (fast updates)
+1. Player 1 creates room, gets unique code
+2. Player 2 joins using code
+3. Game starts automatically
+4. Moves validated by custom chess engine
+5. Real-time updates via HTTP requests
 
-## 🏃‍♂️ Run Locally
+## Run locally
 
 ```bash
-# Clone the repo
 git clone https://github.com/dushyant4665/gambit
 cd gambit
 
-# Start server
+# Terminal 1 - Server
 cd server
 npm install
 npm run test
 
-# Start client (new terminal)
-cd client  
+# Terminal 2 - Client
+cd client
 npm install
 npm run dev
 ```
 
-Visit `http://localhost:3000` and start playing!
+Open http://localhost:3000
 
-## 🌐 Deploy for Free
+## Deploy
 
-### Option 1: Vercel + Railway (Recommended)
-1. **Client**: Push to GitHub → Connect Vercel → Done
-2. **Server**: Same repo → Connect Railway → Done
-3. **Config**: Set `NEXT_PUBLIC_API_URL` to Railway URL
+Client: Vercel (free)
+Server: Railway (free)
 
-### Option 2: Netlify + Render
-1. **Client**: GitHub → Netlify
-2. **Server**: GitHub → Render
-3. **Config**: Update API URL
+Connect GitHub repo to both platforms. Auto-deploys on push.
 
-Both are 100% free for small projects.
+## Features
 
-## 📱 Features
+- All chess rules implemented
+- Move validation
+- Checkmate detection
+- Player names
+- Mobile responsive
+- No database required
 
-- ✅ Real-time multiplayer
-- ✅ Custom player names  
-- ✅ Responsive design (works on mobile)
-- ✅ All chess rules (castling, en passant, promotion)
-- ✅ Checkmate/stalemate detection
-- ✅ Move history
-- ✅ No authentication needed
+## Architecture
 
-## 🎯 Why Gambit?
-
-- **Simple**: Just share a code, start playing
-- **Fast**: Real-time updates, no lag
-- **Clean**: Beautiful, modern interface
-- **Smart**: Custom chess engine validates all moves
-- **Free**: Deploy anywhere for $0
-
-## 🤝 Contributing
-
-Found a bug? Want to add a feature? 
-1. Fork the repo
-2. Make changes
-3. Send a pull request
-
-## 📞 Support
-
-Having issues? Create an issue on GitHub or DM me.
-
----
-
-**Made with ❤️ for chess lovers**
-
-[Play Now](https://your-deployment-url.vercel.app) | [GitHub](https://github.com/dushyant4665/gambit)
+Client sends HTTP requests to server. Server validates moves using custom chess engine. Game state stored in memory. Client polls for updates every 200ms.

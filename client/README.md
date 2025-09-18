@@ -1,62 +1,43 @@
-# ♟️ Gambit Client
+# Gambit Client
 
-The frontend for our chess game. Built with Next.js 14.
+Frontend for the chess game. Built with Next.js 14.
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and play chess!
+Open http://localhost:3000
 
-## 🛠️ For Production
+## Production Build
 
 ```bash
-# Build optimized version
 npm run build
-
-# Start production server  
 npm start
 ```
 
-## 📱 What's Inside
+## Tech Stack
 
-- **Next.js 14** - React framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **React Chessboard** - Chess UI
-- **Responsive Design** - Works on mobile
+- Next.js 14 - React framework
+- TypeScript - Type safety
+- Tailwind CSS - Styling
+- React Chessboard - Chess UI
 
-## ⚙️ Environment
+## Environment
 
-Create `.env.local`:
+Create .env.local:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
-For production, change to your deployed server URL.
+Change URL for production deployment.
 
-## 📊 Bundle Size
+## Deploy
 
-- Main page: 91.2 kB
-- Game room: 120 kB
-- 4 static pages pre-built
+Vercel: Connect GitHub repo, auto-deploys
+Netlify: Connect GitHub repo, set build command
 
-Pretty fast! ⚡
-
-## 🌐 Deploy
-
-**Vercel** (recommended):
-1. Connect GitHub repo
-2. Auto-deploys on push
-3. Set `NEXT_PUBLIC_API_URL` in settings
-
-**Netlify**:
-1. Connect GitHub repo  
-2. Build: `npm run build`
-3. Publish: `out/` folder
-
-Both are free!
+Both free.

@@ -312,7 +312,7 @@ export default function RoomPage() {
     }
   }
 
-  const onDrop = useCallback(async (sourceSquare: string, targetSquare: string) => {
+  const onDrop = useCallback((sourceSquare: string, targetSquare: string) => {
     // Room creator is white (player1), joiner is black (player2)
     const createdRooms = JSON.parse(localStorage.getItem('createdRooms') || '[]')
     const isCreator = createdRooms.includes(roomCode)
@@ -325,16 +325,17 @@ export default function RoomPage() {
     
     if (!canMove) return false
 
-    // Make the move and wait for server response
-    const success = await makeMove(sourceSquare, targetSquare)
+    // Make the move asynchronously
+    makeMove(sourceSquare, targetSquare).then(success => {
+      if (success) {
+        setSelectedSquare(null)
+        setValidMoves([])
+        // Force immediate state reload
+        loadGameState()
+      }
+    })
     
-    if (success) {
-      setSelectedSquare(null)
-      setValidMoves([])
-      return true // Allow the visual move only if server accepts
-    }
-    
-    return false // Reject the move if server rejects
+    return true // Allow the visual move, validation happens server-side
   }, [activeColor, playerCount, roomCode])
 
   return (

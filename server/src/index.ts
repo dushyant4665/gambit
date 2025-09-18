@@ -164,8 +164,8 @@ app.post('/api/moves', async (req, res) => {
     }
 
     // Get game state to check whose turn it is
-    const gameState = engine.getGameState()
-    const currentTurn = gameState.activeColor // 'w' for white, 'b' for black
+    const gameState1 = engine.getGameState()
+    const currentTurn = gameState1.activeColor // 'w' for white, 'b' for black
     
     // Determine if player is room creator (white) or joiner (black)
     const isRoomCreator = player_id === 'creator'
@@ -180,7 +180,7 @@ app.post('/api/moves', async (req, res) => {
     }
 
     // Additional check: Black cannot move until white has moved at least once
-    if (playerColor === 'b' && gameState.moveHistory.length === 0) {
+    if (playerColor === 'b' && gameState1.moveHistory.length === 0) {
       return res.status(400).json({ 
         success: false, 
         error: 'White must make the first move'
@@ -222,8 +222,8 @@ app.post('/api/moves', async (req, res) => {
     }
 
     // Get current move number
-    const gameState = engine.getGameState()
-    const moveNumber = gameState.moveHistory.length
+    const gameState2 = engine.getGameState()
+    const moveNumber = gameState2.moveHistory.length
 
     // Store move in database
     const { error } = await supabase

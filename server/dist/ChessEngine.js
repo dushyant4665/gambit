@@ -157,8 +157,18 @@ class ChessEngine {
             this.state.board[from.row][rookFromCol] = null;
             this.state.board[from.row][rookToCol] = rook;
         }
+        // Handle pawn promotion (only at end of board)
+        let finalPiece = piece;
+        if (pieceType === 'p') {
+            const promotionRow = pieceColor === 'w' ? 0 : 7;
+            if (to.row === promotionRow) {
+                const promotionPiece = promotion || 'q';
+                finalPiece = `${pieceColor}${promotionPiece}`;
+                move.promotion = promotionPiece;
+            }
+        }
         // Make the move
-        this.state.board[to.row][to.col] = promotion ? `${pieceColor}${promotion}` : piece;
+        this.state.board[to.row][to.col] = finalPiece;
         this.state.board[from.row][from.col] = null;
         // Update game state
         this.updateGameState(move);
@@ -477,6 +487,23 @@ class ChessEngine {
             }
         }
         return moves;
+    }
+    // Public method to get valid moves for a specific piece
+    getValidMovesForPiece(from) {
+        const piece = this.state.board[from.row][from.col];
+        if (!piece || piece[0] !== this.state.activeColor) {
+            return [];
+        }
+        const validMoves = [];
+        for (let toRow = 0; toRow < 8; toRow++) {
+            for (let toCol = 0; toCol < 8; toCol++) {
+                const to = { row: toRow, col: toCol };
+                if (this.isMoveValid(from, to)) {
+                    validMoves.push(to);
+                }
+            }
+        }
+        return validMoves;
     }
     isInsufficientMaterial() {
         const pieces = {};

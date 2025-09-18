@@ -7,7 +7,8 @@
     "dev": "ts-node src/index.ts",
     "test": "ts-node src/test-server.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/test-server.js",
+    "start:prod": "NODE_ENV=production node dist/test-server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

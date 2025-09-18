@@ -203,8 +203,19 @@ export class ChessEngine {
       this.state.board[from.row][rookToCol] = rook
     }
 
+    // Handle pawn promotion (only at end of board)
+    let finalPiece: Piece = piece
+    if (pieceType === 'p') {
+      const promotionRow = pieceColor === 'w' ? 0 : 7
+      if (to.row === promotionRow) {
+        const promotionPiece = promotion || 'q'
+        finalPiece = `${pieceColor}${promotionPiece}` as Piece
+        move.promotion = promotionPiece
+      }
+    }
+
     // Make the move
-    this.state.board[to.row][to.col] = promotion ? `${pieceColor}${promotion}` as Piece : piece
+    this.state.board[to.row][to.col] = finalPiece
     this.state.board[from.row][from.col] = null
 
     // Update game state

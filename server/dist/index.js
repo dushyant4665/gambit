@@ -108,9 +108,18 @@ function positionToAlgebraic(pos) {
 // Make a move
 app.post('/api/moves', async (req, res) => {
     try {
-        const { room_code, from, to, promotion } = req.body;
-        if (!room_code || !from || !to) {
+        const { room_code, from, to, promotion, player_id } = req.body;
+        if (!room_code || !from || !to || !player_id) {
             return res.status(400).json({ error: 'Missing required fields' });
+        }
+        // Get room info to determine who is white (room creator)
+        const { data: roomData } = await supabase_1.supabase
+            .from('rooms')
+            .select('*')
+            .eq('code', room_code)
+            .single();
+        if (!roomData) {
+            return res.status(404).json({ error: 'Room not found' });
         }
         // Get chess game instance
         let engine = activeGames.get(room_code);
@@ -132,6 +141,26 @@ app.post('/api/moves', async (req, res) => {
             }
             activeGames.set(room_code, engine);
         }
+        // Get game state to check whose turn it is
+        const gameState1 = engine.getGameState();
+        const currentTurn = gameState1.activeColor; // 'w' for white, 'b' for black
+        // Determine if player is room creator (white) or joiner (black)
+        const isRoomCreator = player_id === 'creator';
+        const playerColor = isRoomCreator ? 'w' : 'b';
+        // Check if it's the player's turn
+        if (currentTurn !== playerColor) {
+            return res.status(400).json({
+                success: false,
+                error: currentTurn === 'w' ? 'It is white\'s turn' : 'It is black\'s turn'
+            });
+        }
+        // Additional check: Black cannot move until white has moved at least once
+        if (playerColor === 'b' && gameState1.moveHistory.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'White must make the first move'
+            });
+        }
         // Convert algebraic notation to positions
         const fromPos = algebraicToPosition(from);
         const toPos = algebraicToPosition(to);
@@ -144,6 +173,14 @@ app.post('/api/moves', async (req, res) => {
                 error: 'No piece at source square'
             });
         }
+        // Additional validation: ensure player is moving their own pieces
+        const [pieceColor] = piece;
+        if (pieceColor !== playerColor) {
+            return res.status(400).json({
+                success: false,
+                error: 'You can only move your own pieces'
+            });
+        }
         // Validate and make move
         const move = engine.makeMove(fromPos, toPos, promotion);
         if (!move) {
@@ -153,8 +190,8 @@ app.post('/api/moves', async (req, res) => {
             });
         }
         // Get current move number
-        const gameState = engine.getGameState();
-        const moveNumber = gameState.moveHistory.length;
+        const gameState2 = engine.getGameState();
+        const moveNumber = gameState2.moveHistory.length;
         // Store move in database
         const { error } = await supabase_1.supabase
             .from('moves')
@@ -208,6 +245,59 @@ app.post('/api/moves', async (req, res) => {
             success: false,
             error: 'Internal server error'
         });
+    }
+});
+// Get valid moves for a piece
+app.post('/api/rooms/:code/valid-moves', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const { square, player_id } = req.body;
+        if (!square || !player_id) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        // Get chess game instance
+        let engine = activeGames.get(code);
+        if (!engine) {
+            // Initialize if not found
+            engine = new ChessEngine_1.ChessEngine();
+            // Load existing moves
+            const { data: moves } = await supabase_1.supabase
+                .from('moves')
+                .select('*')
+                .eq('room_code', code)
+                .order('move_number', { ascending: true });
+            if (moves) {
+                moves.forEach((move) => {
+                    const fromPos = algebraicToPosition(move.from_sq);
+                    const toPos = algebraicToPosition(move.to_sq);
+                    engine.makeMove(fromPos, toPos, move.promotion);
+                });
+            }
+            activeGames.set(code, engine);
+        }
+        // Get game state to check whose turn it is
+        const gameState = engine.getGameState();
+        const currentTurn = gameState.activeColor;
+        // Determine if player is room creator (white) or joiner (black)
+        const isRoomCreator = player_id === 'creator';
+        const playerColor = isRoomCreator ? 'w' : 'b';
+        // Only show valid moves if it's the player's turn
+        if (currentTurn !== playerColor) {
+            return res.json({ validMoves: [] });
+        }
+        // Additional check: Black cannot see moves until white has moved
+        if (playerColor === 'b' && gameState.moveHistory.length === 0) {
+            return res.json({ validMoves: [] });
+        }
+        const fromPos = algebraicToPosition(square);
+        const validMoves = engine.getValidMovesForPiece(fromPos);
+        // Convert positions back to algebraic notation
+        const validSquares = validMoves.map(pos => positionToAlgebraic(pos));
+        res.json({ validMoves: validSquares });
+    }
+    catch (error) {
+        console.error('Error getting valid moves:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 // Get current game state

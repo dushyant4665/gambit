@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: #1a1a1a; /* Solid dark gray */
+  color: #ffffff;     /* Pure white */
+}
+
+body {
+  background: #1a1a1a; /* Solid dark gray */
+  color: #ffffff;     /* Pure white */
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Chess Board Custom Styles */
+.react-chessboard {
+  cursor: default;
+}
+
+.react-chessboard .square {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Piece hover effects */
+.react-chessboard .piece {
+  transition: all 0.15s ease-in-out;
+  cursor: grab;
+}
+
+.react-chessboard .piece:hover {
+  cursor: grab;
+  transform: scale(1.05);
+  filter: brightness(1.1) drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+}
+
+.react-chessboard .piece:active {
+  cursor: grabbing;
+  transform: scale(1.1);
+  filter: brightness(1.2) drop-shadow(0 6px 12px rgba(0,0,0,0.4));
+}
+
+/* Selected piece styling */
+.react-chessboard .square.selected {
+  background-color: rgba(255, 255, 0, 0.6) !important;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 0, 0.8);
+}
+
+/* Valid move indicators */
+.react-chessboard .square.valid-move {
+  position: relative;
+  cursor: pointer;
+}
+
+.react-chessboard .square.valid-move::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 25%;
+  height: 25%;
+  background: rgba(0, 255, 0, 0.7);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Valid move on occupied square (capture) */
+.react-chessboard .square.valid-move.occupied::after {
+  width: 90%;
+  height: 90%;
+  background: transparent;
+  border: 4px solid rgba(255, 0, 0, 0.8);
+  border-radius: 50%;
+}
+
+/* Dragging piece */
+.react-chessboard .piece.dragging {
+  cursor: grabbing !important;
+  transform: scale(1.15) rotate(5deg);
+  filter: brightness(1.3) drop-shadow(0 8px 16px rgba(0,0,0,0.5));
+  z-index: 1000;
+}
+
+/* Board notation styling */
+.react-chessboard .coordinate {
+  color: #666;
+  font-weight: bold;
+  pointer-events: none;
+}
+
+/* Smooth animations for all interactions */
+.react-chessboard * {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}

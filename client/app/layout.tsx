@@ -5,7 +5,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Chess MLT - Multiplayer Chess',
+  title: 'Gambit - Multiplayer Chess',
   description: 'Real-time multiplayer chess game',
 }
 

@@ -57,11 +57,12 @@ export default function RoomPage() {
       const result = await response.json()
       if (result.success) {
         console.log(`Joined room as ${playerId}, player count: ${result.playerCount}`)
-        // Force immediate name updates after joining
+        // Force immediate name and state updates after joining
         setTimeout(() => loadGameState(), 50)
         setTimeout(() => loadGameState(), 150)
         setTimeout(() => loadGameState(), 300)
         setTimeout(() => loadGameState(), 500)
+        setTimeout(() => loadGameState(), 1000)
       }
     } catch (error) {
       console.error('Error joining room:', error)
@@ -135,6 +136,12 @@ export default function RoomPage() {
             setShowPlayerJoinedPopup(true)
             localStorage.setItem(`popup_shown_${roomCode}`, 'true')
             setTimeout(() => setShowPlayerJoinedPopup(false), 3000)
+            
+            // Force reload after player 2 joins to refresh game state
+            setTimeout(() => {
+              loadGameState()
+              loadGameState()
+            }, 100)
           }
         }
       }
@@ -305,7 +312,7 @@ export default function RoomPage() {
     }
   }
 
-  const onDrop = useCallback((sourceSquare: string, targetSquare: string) => {
+  const onDrop = useCallback(async (sourceSquare: string, targetSquare: string) => {
     // Room creator is white (player1), joiner is black (player2)
     const createdRooms = JSON.parse(localStorage.getItem('createdRooms') || '[]')
     const isCreator = createdRooms.includes(roomCode)
@@ -318,17 +325,16 @@ export default function RoomPage() {
     
     if (!canMove) return false
 
-    // Make the move asynchronously and ensure immediate UI update
-    makeMove(sourceSquare, targetSquare).then(success => {
-      if (success) {
-        setSelectedSquare(null)
-        setValidMoves([])
-        // Force immediate state reload
-        loadGameState()
-      }
-    })
+    // Make the move and wait for server response
+    const success = await makeMove(sourceSquare, targetSquare)
     
-    return true // Allow the drop, validation happens server-side
+    if (success) {
+      setSelectedSquare(null)
+      setValidMoves([])
+      return true // Allow the visual move only if server accepts
+    }
+    
+    return false // Reject the move if server rejects
   }, [activeColor, playerCount, roomCode])
 
   return (
@@ -487,6 +493,8 @@ export default function RoomPage() {
                 }}
                 areArrowsAllowed={false}
                 showBoardNotation={true}
+                animationDuration={0}
+                snapToCursor={true}
               />
             </div>
             

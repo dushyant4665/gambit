@@ -1,3 +1,0 @@
-NEXT_PUBLIC_API_URL=http://localhost:3001
-
-# Copy this file to .env.local in the client directory

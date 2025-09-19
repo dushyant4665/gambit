@@ -5,4 +5,4 @@ export function generateRoomCode(): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return result
-}
+}

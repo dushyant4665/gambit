@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-// import { api } from '../lib/api' - using direct fetch
 
 export default function Home() {
   const [showJoinInput, setShowJoinInput] = useState(false)
@@ -30,6 +29,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ player_name: playerName.trim() }),
       })
       
       if (!response.ok) {
@@ -39,7 +39,6 @@ export default function Home() {
       const { code } = await response.json()
       console.log('Room created:', code)
       
-      // Store room code and player name in localStorage
       const createdRooms = JSON.parse(localStorage.getItem('createdRooms') || '[]')
       createdRooms.push(code)
       localStorage.setItem('createdRooms', JSON.stringify(createdRooms))
@@ -69,12 +68,15 @@ export default function Home() {
     
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/rooms/${roomCode.toUpperCase()}`)
-      const { exists } = await response.json()
       
-      if (exists) {
-        // Store player name for this room
-        localStorage.setItem(`player_name_${roomCode.toUpperCase()}`, playerName.trim())
-        router.push(`/room/${roomCode.toUpperCase()}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          localStorage.setItem(`player_name_${roomCode.toUpperCase()}`, playerName.trim())
+          router.push(`/room/${roomCode.toUpperCase()}`)
+        } else {
+          setError('Room not found')
+        }
       } else {
         setError('Room not found')
       }
@@ -87,7 +89,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
-      {/* GitHub Icon - Responsive */}
       <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50">
         <a 
           href="https://github.com/dushyant4665/gambit" 

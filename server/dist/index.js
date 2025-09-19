@@ -3,342 +3,347 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require('dotenv').config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const http_1 = require("http");
+const socket_io_1 = require("socket.io");
+const supabase_js_1 = require("@supabase/supabase-js");
 const ChessEngine_1 = require("./ChessEngine");
-const supabase_1 = require("./supabase");
-const utils_1 = require("./utils");
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 3001;
-app.use((0, cors_1.default)());
-app.use(express_1.default.json());
-// Store active games in memory for move validation
+const server = (0, http_1.createServer)(app);
+const io = new socket_io_1.Server(server, {
+    cors: {
+        origin: process.env.NODE_ENV === 'production'
+            ? [process.env.CLIENT_URL || 'https://gambitt.vercel.app']
+            : ['http://localhost:3000'],
+        methods: ['GET', 'POST'],
+        credentials: true
+    }
+});
+const supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const activeGames = new Map();
-// Create a new room
+const roomConnections = new Map();
+const socketRooms = new Map();
+app.use(express_1.default.json());
+app.use((0, cors_1.default)({
+    origin: process.env.NODE_ENV === 'production'
+        ? [process.env.CLIENT_URL || 'https://gambitt.vercel.app']
+        : ['http://localhost:3000'],
+    credentials: true
+}));
+function generateRoomCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+function algebraicToPosition(square) {
+    const file = square.charCodeAt(0) - 97;
+    const rank = parseInt(square[1]) - 1;
+    return { row: 7 - rank, col: file };
+}
+function positionToAlgebraic(row, col) {
+    const file = String.fromCharCode(97 + col);
+    const rank = (8 - row).toString();
+    return file + rank;
+}
+io.on('connection', (socket) => {
+    console.log(`Socket connected: ${socket.id}`);
+    socket.on('join-room', async (data) => {
+        const { roomCode, playerName, isCreator } = data;
+        try {
+            const { data: room, error: roomError } = await supabase
+                .from('rooms')
+                .select('*')
+                .eq('code', roomCode.toUpperCase())
+                .single();
+            if (roomError || !room) {
+                socket.emit('error', { message: 'Room not found' });
+                return;
+            }
+            socket.join(roomCode);
+            socketRooms.set(socket.id, roomCode);
+            if (!roomConnections.has(roomCode)) {
+                roomConnections.set(roomCode, new Set());
+            }
+            roomConnections.get(roomCode).add(socket.id);
+            const updateData = {};
+            if (isCreator && !room.white_assigned) {
+                updateData.white_socket_id = socket.id;
+                updateData.white_assigned = true;
+                updateData.white_player_name = playerName;
+            }
+            else if (!isCreator && !room.black_assigned) {
+                updateData.black_socket_id = socket.id;
+                updateData.black_assigned = true;
+                updateData.black_player_name = playerName;
+                updateData.status = 'playing';
+            }
+            if (Object.keys(updateData).length > 0) {
+                await supabase
+                    .from('rooms')
+                    .update(updateData)
+                    .eq('id', room.id);
+            }
+            let engine = activeGames.get(roomCode);
+            if (!engine) {
+                engine = new ChessEngine_1.ChessEngine();
+                const { data: moves } = await supabase
+                    .from('moves')
+                    .select('*')
+                    .eq('room_id', room.id)
+                    .order('move_number', { ascending: true });
+                if (moves && moves.length > 0) {
+                    moves.forEach((move) => {
+                        const fromPos = algebraicToPosition(move.from_square);
+                        const toPos = algebraicToPosition(move.to_square);
+                        engine.makeMove(fromPos, toPos, move.promotion);
+                    });
+                }
+                activeGames.set(roomCode, engine);
+            }
+            const gameState = engine.getGameState();
+            socket.emit('game-state', {
+                roomCode,
+                fen: engine.exportFEN(),
+                activeColor: gameState.activeColor,
+                gameStatus: engine.isCheckmate() ? 'checkmate' :
+                    engine.isStalemate() ? 'stalemate' :
+                        engine.isCheck() ? 'check' : 'ongoing',
+                moveCount: gameState.moveHistory.length,
+                playerNames: {
+                    white: room.white_player_name || 'Player 1',
+                    black: room.black_player_name || 'Player 2'
+                },
+                playerCount: (room.white_assigned ? 1 : 0) + (room.black_assigned ? 1 : 0),
+                gameStarted: room.status === 'playing'
+            });
+            if (updateData.status === 'playing') {
+                const updatedRoom = { ...room, ...updateData };
+                console.log(`🚀 EMITTING ROOM:STARTED for room ${roomCode}`);
+                io.to(roomCode).emit('room:started', {
+                    roomCode,
+                    whiteId: updatedRoom.white_socket_id,
+                    blackId: updatedRoom.black_socket_id,
+                    fen: engine.exportFEN(),
+                    turn: gameState.activeColor,
+                    playerNames: {
+                        white: updatedRoom.white_player_name,
+                        black: updatedRoom.black_player_name
+                    }
+                });
+                console.log(`✅ Room started event sent. White (${updatedRoom.white_player_name}) to move first.`);
+            }
+            console.log(`Player ${isCreator ? 'creator' : 'joiner'} joined room ${roomCode}`);
+        }
+        catch (error) {
+            console.error('Error joining room:', error);
+            socket.emit('error', { message: 'Failed to join room' });
+        }
+    });
+    socket.on('make-move', async (data) => {
+        const { roomCode, from, to, promotion } = data;
+        const currentRoom = socketRooms.get(socket.id);
+        if (currentRoom !== roomCode) {
+            socket.emit('move-error', { error: 'Not in this room' });
+            return;
+        }
+        try {
+            const { data: room, error: roomError } = await supabase
+                .from('rooms')
+                .select('*')
+                .eq('code', roomCode.toUpperCase())
+                .single();
+            if (roomError || !room || room.status !== 'playing') {
+                socket.emit('move-error', { error: 'Game not active' });
+                return;
+            }
+            const isWhite = socket.id === room.white_socket_id;
+            const playerColor = isWhite ? 'w' : 'b';
+            let engine = activeGames.get(roomCode);
+            if (!engine) {
+                socket.emit('move-error', { error: 'Game engine not found' });
+                return;
+            }
+            const gameState = engine.getGameState();
+            console.log(`🎯 Move validation: activeColor=${gameState.activeColor}, playerColor=${playerColor}, isWhite=${isWhite}`);
+            if (gameState.activeColor !== playerColor) {
+                console.log(`❌ Turn validation failed: expected ${playerColor}, got ${gameState.activeColor}`);
+                socket.emit('move-error', {
+                    error: `It's ${gameState.activeColor === 'w' ? 'white' : 'black'}'s turn`
+                });
+                return;
+            }
+            console.log(`✅ Turn validation passed: ${playerColor} to move`);
+            const nextMoveNumber = gameState.moveHistory.length + 1;
+            const { data: existingMove } = await supabase
+                .from('moves')
+                .select('id')
+                .eq('room_id', room.id)
+                .eq('move_number', nextMoveNumber)
+                .eq('from_square', from)
+                .eq('to_square', to)
+                .maybeSingle();
+            if (existingMove) {
+                console.log('❌ Duplicate move detected');
+                socket.emit('move-error', { error: 'Move already processed' });
+                return;
+            }
+            const fromPos = algebraicToPosition(from);
+            const toPos = algebraicToPosition(to);
+            const board = engine.getBoard();
+            const piece = board[fromPos.row][fromPos.col];
+            if (!piece || piece[0] !== playerColor) {
+                socket.emit('move-error', { error: 'Invalid piece selection' });
+                return;
+            }
+            const moveObj = engine.makeMove(fromPos, toPos, promotion);
+            if (!moveObj) {
+                socket.emit('move-error', { error: 'Invalid move' });
+                return;
+            }
+            const finalMoveNumber = gameState.moveHistory.length + 1;
+            const newGameState = engine.getGameState();
+            const { data: savedMove, error: moveError } = await supabase
+                .from('moves')
+                .insert({
+                room_id: room.id,
+                move_number: finalMoveNumber,
+                color: playerColor,
+                from_square: from,
+                to_square: to,
+                piece: piece,
+                captured_piece: null,
+                promotion: promotion || null,
+                san: `${from}-${to}`,
+                is_check: engine.isCheck(),
+                is_checkmate: engine.isCheckmate(),
+                is_stalemate: engine.isStalemate(),
+                fen_after: engine.exportFEN()
+            })
+                .select()
+                .single();
+            if (moveError || !savedMove) {
+                console.error('Failed to save move:', moveError);
+                socket.emit('move-error', { error: 'Failed to save move' });
+                return;
+            }
+            const updateData = {
+                current_fen: engine.exportFEN(),
+                current_turn: newGameState.activeColor
+            };
+            if (engine.isCheckmate() || engine.isStalemate()) {
+                updateData.status = 'finished';
+                updateData.winner = engine.isCheckmate()
+                    ? (newGameState.activeColor === 'w' ? 'b' : 'w')
+                    : 'd';
+            }
+            const { error: updateError } = await supabase
+                .from('rooms')
+                .update(updateData)
+                .eq('id', room.id);
+            if (updateError) {
+                console.error('Failed to update room:', updateError);
+                socket.emit('move-error', { error: 'Failed to update game state' });
+                return;
+            }
+            console.log(`✅ Room updated: turn=${newGameState.activeColor}, status=${updateData.status || 'playing'}`);
+            io.to(roomCode).emit('move:confirmed', {
+                moveId: savedMove.id,
+                from,
+                to,
+                san: savedMove.san,
+                color: playerColor,
+                moveNumber: finalMoveNumber,
+                fen: engine.exportFEN(),
+                activeColor: newGameState.activeColor,
+                isCheck: engine.isCheck(),
+                isCheckmate: engine.isCheckmate(),
+                isStalemate: engine.isStalemate(),
+                gameStatus: engine.isCheckmate() ? 'checkmate' :
+                    engine.isStalemate() ? 'stalemate' :
+                        engine.isCheck() ? 'check' : 'ongoing',
+                createdAt: savedMove.created_at
+            });
+            console.log(`Move confirmed: ${from} to ${to} in room ${roomCode}`);
+        }
+        catch (error) {
+            console.error('Error making move:', error);
+            socket.emit('move-error', { error: 'Server error' });
+        }
+    });
+    socket.on('disconnect', () => {
+        console.log(`Socket disconnected: ${socket.id}`);
+        const roomCode = socketRooms.get(socket.id);
+        if (roomCode) {
+            const connections = roomConnections.get(roomCode);
+            if (connections) {
+                connections.delete(socket.id);
+                if (connections.size === 0) {
+                    roomConnections.delete(roomCode);
+                }
+            }
+            socketRooms.delete(socket.id);
+        }
+    });
+});
 app.post('/api/rooms', async (req, res) => {
     try {
-        let code;
-        let attempts = 0;
-        const maxAttempts = 10;
-        // Generate unique room code
-        do {
-            code = (0, utils_1.generateRoomCode)();
-            attempts++;
-            if (attempts > maxAttempts) {
-                return res.status(500).json({ error: 'Failed to generate unique room code' });
-            }
-            const { data: existingRoom } = await supabase_1.supabase
-                .from('rooms')
-                .select('code')
-                .eq('code', code)
-                .single();
-            if (!existingRoom)
-                break;
-        } while (true);
-        // Create room in database
-        const { error } = await supabase_1.supabase
+        const { player_name } = req.body;
+        const code = generateRoomCode();
+        const { data: room, error } = await supabase
             .from('rooms')
-            .insert({ code });
+            .insert({
+            code: code,
+            status: 'waiting',
+            white_player_name: player_name,
+            white_assigned: false,
+            black_assigned: false,
+            current_fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            current_turn: 'w'
+        })
+            .select()
+            .single();
         if (error) {
             console.error('Error creating room:', error);
             return res.status(500).json({ error: 'Failed to create room' });
         }
-        // Initialize chess game for this room
-        activeGames.set(code, new ChessEngine_1.ChessEngine());
-        res.json({ code });
+        res.json({ success: true, code, room_id: room.id });
     }
     catch (error) {
-        console.error('Error in POST /api/rooms:', error);
+        console.error('Error creating room:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Check if room exists
 app.get('/api/rooms/:code', async (req, res) => {
     try {
         const { code } = req.params;
-        const { data: room } = await supabase_1.supabase
-            .from('rooms')
-            .select('code')
-            .eq('code', code)
-            .single();
-        if (room) {
-            // Initialize chess game if not already present
-            if (!activeGames.has(code)) {
-                const engine = new ChessEngine_1.ChessEngine();
-                // Load existing moves
-                const { data: moves } = await supabase_1.supabase
-                    .from('moves')
-                    .select('*')
-                    .eq('room_code', code)
-                    .order('move_number', { ascending: true });
-                if (moves) {
-                    moves.forEach((move) => {
-                        const from = {
-                            row: 8 - parseInt(move.from_sq[1]),
-                            col: move.from_sq.charCodeAt(0) - 'a'.charCodeAt(0)
-                        };
-                        const to = {
-                            row: 8 - parseInt(move.to_sq[1]),
-                            col: move.to_sq.charCodeAt(0) - 'a'.charCodeAt(0)
-                        };
-                        engine.makeMove(from, to, move.promotion);
-                    });
-                }
-                activeGames.set(code, engine);
-            }
-        }
-        res.json({ exists: !!room });
-    }
-    catch (error) {
-        console.error('Error in GET /api/rooms/:code:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-// Helper function to convert algebraic notation to Position
-function algebraicToPosition(square) {
-    return {
-        row: 8 - parseInt(square[1]),
-        col: square.charCodeAt(0) - 'a'.charCodeAt(0)
-    };
-}
-// Helper function to convert Position to algebraic notation
-function positionToAlgebraic(pos) {
-    return String.fromCharCode('a'.charCodeAt(0) + pos.col) + (8 - pos.row);
-}
-// Make a move
-app.post('/api/moves', async (req, res) => {
-    try {
-        const { room_code, from, to, promotion, player_id } = req.body;
-        if (!room_code || !from || !to || !player_id) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-        // Get room info to determine who is white (room creator)
-        const { data: roomData } = await supabase_1.supabase
+        const { data: room, error } = await supabase
             .from('rooms')
             .select('*')
-            .eq('code', room_code)
+            .eq('code', code.toUpperCase())
             .single();
-        if (!roomData) {
+        if (error || !room) {
             return res.status(404).json({ error: 'Room not found' });
-        }
-        // Get chess game instance
-        let engine = activeGames.get(room_code);
-        if (!engine) {
-            // Initialize if not found
-            engine = new ChessEngine_1.ChessEngine();
-            // Load existing moves
-            const { data: moves } = await supabase_1.supabase
-                .from('moves')
-                .select('*')
-                .eq('room_code', room_code)
-                .order('move_number', { ascending: true });
-            if (moves) {
-                moves.forEach((move) => {
-                    const fromPos = algebraicToPosition(move.from_sq);
-                    const toPos = algebraicToPosition(move.to_sq);
-                    engine.makeMove(fromPos, toPos, move.promotion);
-                });
-            }
-            activeGames.set(room_code, engine);
-        }
-        // Get game state to check whose turn it is
-        const gameState1 = engine.getGameState();
-        const currentTurn = gameState1.activeColor; // 'w' for white, 'b' for black
-        // Determine if player is room creator (white) or joiner (black)
-        const isRoomCreator = player_id === 'creator';
-        const playerColor = isRoomCreator ? 'w' : 'b';
-        // Check if it's the player's turn
-        if (currentTurn !== playerColor) {
-            return res.status(400).json({
-                success: false,
-                error: currentTurn === 'w' ? 'It is white\'s turn' : 'It is black\'s turn'
-            });
-        }
-        // Additional check: Black cannot move until white has moved at least once
-        if (playerColor === 'b' && gameState1.moveHistory.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'White must make the first move'
-            });
-        }
-        // Convert algebraic notation to positions
-        const fromPos = algebraicToPosition(from);
-        const toPos = algebraicToPosition(to);
-        // Get piece before move for storage
-        const board = engine.getBoard();
-        const piece = board[fromPos.row][fromPos.col];
-        if (!piece) {
-            return res.status(400).json({
-                success: false,
-                error: 'No piece at source square'
-            });
-        }
-        // Additional validation: ensure player is moving their own pieces
-        const [pieceColor] = piece;
-        if (pieceColor !== playerColor) {
-            return res.status(400).json({
-                success: false,
-                error: 'You can only move your own pieces'
-            });
-        }
-        // Validate and make move
-        const move = engine.makeMove(fromPos, toPos, promotion);
-        if (!move) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid move'
-            });
-        }
-        // Get current move number
-        const gameState2 = engine.getGameState();
-        const moveNumber = gameState2.moveHistory.length;
-        // Store move in database
-        const { error } = await supabase_1.supabase
-            .from('moves')
-            .insert({
-            room_code,
-            move_number: moveNumber,
-            from_sq: from,
-            to_sq: to,
-            piece,
-            promotion: promotion || null,
-            san: null // We can generate SAN later if needed
-        });
-        if (error) {
-            console.error('Error storing move:', error);
-            return res.status(500).json({
-                success: false,
-                error: 'Failed to store move'
-            });
-        }
-        // Check game status
-        let gameStatus = 'ongoing';
-        if (engine.isCheckmate()) {
-            gameStatus = 'checkmate';
-        }
-        else if (engine.isStalemate()) {
-            gameStatus = 'stalemate';
-        }
-        else if (engine.isDraw()) {
-            gameStatus = 'draw';
-        }
-        else if (engine.isCheck()) {
-            gameStatus = 'check';
         }
         res.json({
             success: true,
-            move: {
-                from,
-                to,
-                piece,
-                promotion,
-                moveNumber,
-                gameStatus,
-                activeColor: engine.getActiveColor(),
-                fen: engine.exportFEN()
+            room: {
+                code: room.code,
+                status: room.status,
+                playerCount: (room.white_assigned ? 1 : 0) + (room.black_assigned ? 1 : 0),
+                gameStarted: room.status === 'playing'
             }
         });
     }
     catch (error) {
-        console.error('Error in POST /api/moves:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error'
-        });
-    }
-});
-// Get valid moves for a piece
-app.post('/api/rooms/:code/valid-moves', async (req, res) => {
-    try {
-        const { code } = req.params;
-        const { square, player_id } = req.body;
-        if (!square || !player_id) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-        // Get chess game instance
-        let engine = activeGames.get(code);
-        if (!engine) {
-            // Initialize if not found
-            engine = new ChessEngine_1.ChessEngine();
-            // Load existing moves
-            const { data: moves } = await supabase_1.supabase
-                .from('moves')
-                .select('*')
-                .eq('room_code', code)
-                .order('move_number', { ascending: true });
-            if (moves) {
-                moves.forEach((move) => {
-                    const fromPos = algebraicToPosition(move.from_sq);
-                    const toPos = algebraicToPosition(move.to_sq);
-                    engine.makeMove(fromPos, toPos, move.promotion);
-                });
-            }
-            activeGames.set(code, engine);
-        }
-        // Get game state to check whose turn it is
-        const gameState = engine.getGameState();
-        const currentTurn = gameState.activeColor;
-        // Determine if player is room creator (white) or joiner (black)
-        const isRoomCreator = player_id === 'creator';
-        const playerColor = isRoomCreator ? 'w' : 'b';
-        // Only show valid moves if it's the player's turn
-        if (currentTurn !== playerColor) {
-            return res.json({ validMoves: [] });
-        }
-        // Additional check: Black cannot see moves until white has moved
-        if (playerColor === 'b' && gameState.moveHistory.length === 0) {
-            return res.json({ validMoves: [] });
-        }
-        const fromPos = algebraicToPosition(square);
-        const validMoves = engine.getValidMovesForPiece(fromPos);
-        // Convert positions back to algebraic notation
-        const validSquares = validMoves.map(pos => positionToAlgebraic(pos));
-        res.json({ validMoves: validSquares });
-    }
-    catch (error) {
-        console.error('Error getting valid moves:', error);
+        console.error('Error getting room:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get current game state
-app.get('/api/rooms/:code/state', async (req, res) => {
-    try {
-        const { code } = req.params;
-        const engine = activeGames.get(code);
-        if (!engine) {
-            return res.status(404).json({ error: 'Room not found' });
-        }
-        const gameState = engine.getGameState();
-        const fen = engine.exportFEN();
-        let status = 'ongoing';
-        if (engine.isCheckmate()) {
-            status = 'checkmate';
-        }
-        else if (engine.isStalemate()) {
-            status = 'stalemate';
-        }
-        else if (engine.isDraw()) {
-            status = 'draw';
-        }
-        else if (engine.isCheck()) {
-            status = 'check';
-        }
-        res.json({
-            fen,
-            activeColor: engine.getActiveColor(),
-            gameStatus: status,
-            moveCount: gameState.moveHistory.length
-        });
-    }
-    catch (error) {
-        console.error('Error in GET /api/rooms/:code/state:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-// Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });

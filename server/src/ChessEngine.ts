@@ -76,10 +76,9 @@ export class ChessEngine {
 
     const [boardStr, activeColor, castling, enPassant, halfMove, fullMove] = parts
 
-    // Parse board
     const board: Piece[][] = Array(8).fill(null).map(() => Array(8).fill(null))
     const rows = boardStr.split('/')
-    
+
     for (let row = 0; row < 8; row++) {
       let col = 0
       for (const char of rows[row]) {
@@ -94,7 +93,6 @@ export class ChessEngine {
       }
     }
 
-    // Parse castling rights
     const castlingRights = {
       whiteKingside: castling.includes('K'),
       whiteQueenside: castling.includes('Q'),
@@ -102,7 +100,6 @@ export class ChessEngine {
       blackQueenside: castling.includes('q')
     }
 
-    // Parse en passant
     let enPassantTarget: Position | null = null
     if (enPassant !== '-') {
       const col = enPassant.charCodeAt(0) - 'a'.charCodeAt(0)
@@ -124,7 +121,6 @@ export class ChessEngine {
   exportFEN(): string {
     const { board, activeColor, castlingRights, enPassantTarget, halfMoveClock, fullMoveNumber } = this.state
 
-    // Board
     let boardStr = ''
     for (let row = 0; row < 8; row++) {
       let emptyCount = 0
@@ -147,7 +143,6 @@ export class ChessEngine {
       if (row < 7) boardStr += '/'
     }
 
-    // Castling
     let castling = ''
     if (castlingRights.whiteKingside) castling += 'K'
     if (castlingRights.whiteQueenside) castling += 'Q'
@@ -155,7 +150,6 @@ export class ChessEngine {
     if (castlingRights.blackQueenside) castling += 'q'
     if (castling === '') castling = '-'
 
-    // En passant
     let enPassant = '-'
     if (enPassantTarget) {
       const file = String.fromCharCode('a'.charCodeAt(0) + enPassantTarget.col)
@@ -178,10 +172,8 @@ export class ChessEngine {
     const capturedPiece = this.state.board[to.row][to.col]
     const move: Move = { from, to, piece, capturedPiece, promotion }
 
-    // Handle special moves
     const [, pieceType] = piece
 
-    // En passant
     if (pieceType === 'p' && this.state.enPassantTarget && 
         to.row === this.state.enPassantTarget.row && to.col === this.state.enPassantTarget.col) {
       move.isEnPassant = true
@@ -190,12 +182,10 @@ export class ChessEngine {
       this.state.board[capturedPawnRow][to.col] = null
     }
 
-    // Castling
     if (pieceType === 'k' && Math.abs(to.col - from.col) === 2) {
       move.isCastling = true
       move.castlingType = to.col > from.col ? 'kingside' : 'queenside'
-      
-      // Move rook
+
       const rookFromCol = to.col > from.col ? 7 : 0
       const rookToCol = to.col > from.col ? 5 : 3
       const rook = this.state.board[from.row][rookFromCol]
@@ -203,7 +193,6 @@ export class ChessEngine {
       this.state.board[from.row][rookToCol] = rook
     }
 
-    // Handle pawn promotion (only at end of board)
     let finalPiece: Piece = piece
     if (pieceType === 'p') {
       const promotionRow = pieceColor === 'w' ? 0 : 7
@@ -214,11 +203,9 @@ export class ChessEngine {
       }
     }
 
-    // Make the move
     this.state.board[to.row][to.col] = finalPiece
     this.state.board[from.row][from.col] = null
 
-    // Update game state
     this.updateGameState(move)
 
     return move
@@ -228,7 +215,6 @@ export class ChessEngine {
     const { from, to, piece } = move
     const [pieceColor, pieceType] = piece!
 
-    // Update castling rights
     if (pieceType === 'k') {
       if (pieceColor === 'w') {
         this.state.castlingRights.whiteKingside = false
@@ -249,7 +235,6 @@ export class ChessEngine {
       }
     }
 
-    // Update en passant target
     this.state.enPassantTarget = null
     if (pieceType === 'p' && Math.abs(to.row - from.row) === 2) {
       this.state.enPassantTarget = {
@@ -258,7 +243,6 @@ export class ChessEngine {
       }
     }
 
-    // Update clocks
     if (pieceType === 'p' || move.capturedPiece) {
       this.state.halfMoveClock = 0
     } else {
@@ -269,10 +253,8 @@ export class ChessEngine {
       this.state.fullMoveNumber++
     }
 
-    // Switch active color
     this.state.activeColor = this.state.activeColor === 'w' ? 'b' : 'w'
 
-    // Add to move history
     this.state.moveHistory.push(move)
   }
 
@@ -282,26 +264,21 @@ export class ChessEngine {
 
     const [pieceColor, pieceType] = piece
 
-    // Can't capture own piece
     const targetPiece = this.state.board[to.row][to.col]
     if (targetPiece && targetPiece[0] === pieceColor) return false
 
-    // Check piece-specific movement rules
     if (!this.isPieceMovementValid(from, to, pieceType as PieceType, pieceColor as PieceColor)) return false
 
-    // Check if move would leave king in check
     const tempBoard = this.cloneBoard()
     tempBoard[to.row][to.col] = piece
     tempBoard[from.row][from.col] = null
 
-    // Handle en passant capture
     if (pieceType === 'p' && this.state.enPassantTarget && 
         to.row === this.state.enPassantTarget.row && to.col === this.state.enPassantTarget.col) {
       const capturedPawnRow = pieceColor === 'w' ? to.row + 1 : to.row - 1
       tempBoard[capturedPawnRow][to.col] = null
     }
 
-    // Handle castling
     if (pieceType === 'k' && Math.abs(to.col - from.col) === 2) {
       const rookFromCol = to.col > from.col ? 7 : 0
       const rookToCol = to.col > from.col ? 5 : 3
@@ -339,18 +316,15 @@ export class ChessEngine {
     const direction = color === 'w' ? -1 : 1
     const startRow = color === 'w' ? 6 : 1
 
-    // Forward move
     if (dx === 0) {
       if (dy === direction && !this.state.board[to.row][to.col]) return true
       if (dy === 2 * direction && from.row === startRow && !this.state.board[to.row][to.col] && !this.state.board[from.row + direction][from.col]) return true
     }
 
-    // Capture
     if (Math.abs(dx) === 1 && dy === direction) {
       const targetPiece = this.state.board[to.row][to.col]
       if (targetPiece && targetPiece[0] !== color) return true
-      
-      // En passant
+
       if (this.state.enPassantTarget && 
           to.row === this.state.enPassantTarget.row && 
           to.col === this.state.enPassantTarget.col) {
@@ -382,10 +356,9 @@ export class ChessEngine {
   }
 
   private isKingMoveValid(from: Position, to: Position, color: PieceColor, dx: number, dy: number): boolean {
-    // Regular king move
+
     if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return true
 
-    // Castling
     if (dy === 0 && Math.abs(dx) === 2) {
       return this.canCastle(color, dx > 0 ? 'kingside' : 'queenside')
     }
@@ -397,7 +370,6 @@ export class ChessEngine {
     const row = color === 'w' ? 7 : 0
     const kingCol = 4
 
-    // Check castling rights
     if (color === 'w') {
       if (side === 'kingside' && !this.state.castlingRights.whiteKingside) return false
       if (side === 'queenside' && !this.state.castlingRights.whiteQueenside) return false
@@ -406,10 +378,8 @@ export class ChessEngine {
       if (side === 'queenside' && !this.state.castlingRights.blackQueenside) return false
     }
 
-    // King must not be in check
     if (this.isKingInCheck(color)) return false
 
-    // Path must be clear and king must not pass through check
     const cols = side === 'kingside' ? [5, 6] : [3, 2, 1]
     const checkCols = side === 'kingside' ? [5, 6] : [3, 2]
 
@@ -449,8 +419,7 @@ export class ChessEngine {
 
   private isKingInCheck(color: PieceColor, board?: Piece[][]): boolean {
     const currentBoard = board || this.state.board
-    
-    // Find king position
+
     let kingPos: Position | null = null
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
@@ -465,7 +434,6 @@ export class ChessEngine {
 
     if (!kingPos) return false
 
-    // Check if any opponent piece can attack the king
     const opponentColor: PieceColor = color === 'w' ? 'b' : 'w'
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
@@ -531,13 +499,11 @@ export class ChessEngine {
   }
 
   isDraw(): boolean {
-    // 50-move rule
+
     if (this.state.halfMoveClock >= 100) return true
 
-    // Insufficient material
     if (this.isInsufficientMaterial()) return true
 
-    // Threefold repetition (simplified check)
     if (this.isThreefoldRepetition()) return true
 
     return false
@@ -555,7 +521,7 @@ export class ChessEngine {
             for (let toCol = 0; toCol < 8; toCol++) {
               const from = { row: fromRow, col: fromCol }
               const to = { row: toRow, col: toCol }
-              
+
               if (this.isMoveValid(from, to)) {
                 moves.push({ from, to, piece })
               }
@@ -568,7 +534,6 @@ export class ChessEngine {
     return moves
   }
 
-  // Public method to get valid moves for a specific piece
   getValidMovesForPiece(from: Position): Position[] {
     const piece = this.state.board[from.row][from.col]
     if (!piece || piece[0] !== this.state.activeColor) {
@@ -576,11 +541,11 @@ export class ChessEngine {
     }
 
     const validMoves: Position[] = []
-    
+
     for (let toRow = 0; toRow < 8; toRow++) {
       for (let toCol = 0; toCol < 8; toCol++) {
         const to = { row: toRow, col: toCol }
-        
+
         if (this.isMoveValid(from, to)) {
           validMoves.push(to)
         }
@@ -592,7 +557,7 @@ export class ChessEngine {
 
   private isInsufficientMaterial(): boolean {
     const pieces: { [key: string]: number } = {}
-    
+
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const piece = this.state.board[row][col]
@@ -603,11 +568,9 @@ export class ChessEngine {
     }
 
     const pieceCount = Object.values(pieces).reduce((sum, count) => sum + count, 0)
-    
-    // King vs King
+
     if (pieceCount === 2) return true
-    
-    // King + Knight/Bishop vs King
+
     if (pieceCount === 3) {
       return pieces['wn'] === 1 || pieces['bn'] === 1 || pieces['wb'] === 1 || pieces['bb'] === 1
     }
@@ -618,12 +581,11 @@ export class ChessEngine {
   private isThreefoldRepetition(): boolean {
     const currentFEN = this.exportFEN().split(' ').slice(0, 4).join(' ')
     let count = 0
-    
-    // This is a simplified check - in a full implementation, you'd track all positions
+
     for (const move of this.state.moveHistory) {
-      // For now, just return false - full implementation would require position tracking
+
     }
-    
+
     return false
   }
 

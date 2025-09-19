@@ -76,25 +76,6 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* Fullscreen Toggle Button - Shows on ALL mobile devices */}
-      {connected && (
-        <div className="fixed bottom-4 right-4 z-50 lg:hidden">
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-2xl border-2 border-blue-400 transition-all duration-300 hover:scale-110"
-          >
-            {isFullscreen ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
-              </svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-              </svg>
-            )}
-          </button>
-        </div>
-      )}
 
       {showPlayerJoinedPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -207,7 +188,7 @@ export default function RoomPage() {
              )}
             
             <div 
-              className={`chessboard-container w-full aspect-square mx-auto ${
+              className={`chessboard-container w-full aspect-square mx-auto relative ${
                 isFullscreen 
                   ? 'max-w-none max-h-[100vh] h-[100vh]' 
                   : 'max-w-[280px] sm:max-w-[400px] md:max-w-[500px]'
@@ -218,6 +199,22 @@ export default function RoomPage() {
                 userSelect: 'none'
               }}
             >
+              {/* Fullscreen Toggle Button - Top Right Corner of Chess Board */}
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="absolute top-2 right-2 z-50 bg-gray-800 hover:bg-gray-700 text-white p-2 rounded shadow-lg border border-gray-600 transition-all duration-200"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              >
+                {isFullscreen ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                  </svg>
+                )}
+              </button>
               <Chessboard
                 position={gameState.position}
                 onPieceDrop={handleDrop}

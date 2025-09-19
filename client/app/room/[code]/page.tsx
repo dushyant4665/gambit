@@ -27,6 +27,7 @@ export default function RoomPage() {
   const [showPlayerJoinedPopup, setShowPlayerJoinedPopup] = useState(false)
   const [showGameOverPopup, setShowGameOverPopup] = useState(false)
   const [gameOverData, setGameOverData] = useState<{type: 'checkmate' | 'stalemate' | 'draw', winner?: string}>({type: 'checkmate'})
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   useEffect(() => {
     if (gameState.gameStatus === 'checkmate' && !showGameOverPopup) {
@@ -72,6 +73,26 @@ export default function RoomPage() {
            gameState.gameStatus === 'stalemate' ? '🤝 Stalemate!' :
            gameState.gameStatus === 'draw' ? '🤝 Draw!' :
            isPending ? '⏳ Move pending...' : '📱 Tap piece → Tap destination'}
+        </div>
+      )}
+
+      {/* Fullscreen Toggle Button */}
+      {connected && gameState.gameStarted && (
+        <div className="fixed bottom-2 right-2 z-50 sm:hidden">
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-xl border border-gray-600 transition-all duration-300"
+          >
+            {isFullscreen ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+              </svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+              </svg>
+            )}
+          </button>
         </div>
       )}
 
@@ -131,9 +152,10 @@ export default function RoomPage() {
           </a>
         </div>
       
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-1 sm:mb-6 px-2">
-          <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-dark-text mb-1 sm:mb-2">Room: {roomCode}</h1>
+      <div className={`${isFullscreen ? 'fixed inset-0 bg-dark-bg z-40 flex items-center justify-center' : 'max-w-7xl mx-auto'}`}>
+        {!isFullscreen && (
+          <div className="text-center mb-1 sm:mb-6 px-2">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-dark-text mb-1 sm:mb-2">Room: {roomCode}</h1>
           <p className="text-xs sm:text-base text-dark-text/70 mb-1 sm:mb-2">
             {!gameState.gameStarted 
               ? 'Waiting for Player 2...'
@@ -155,11 +177,13 @@ export default function RoomPage() {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="flex flex-col xl:flex-row gap-2 lg:gap-6 items-start justify-center px-2">
-          <div className="flex-shrink-0 w-full max-w-[500px] mx-auto xl:mx-0">
+        <div className={`${isFullscreen ? 'w-full h-full flex items-center justify-center p-2' : 'flex flex-col xl:flex-row gap-2 lg:gap-6 items-start justify-center px-2'}`}>
+          <div className={`${isFullscreen ? 'w-full max-w-none aspect-square max-h-full' : 'flex-shrink-0 w-full max-w-[500px] mx-auto xl:mx-0'}`}>
              {/* Opponent Player - Top */}
-             <div className="flex items-center justify-center mb-1 sm:mb-4 p-2 bg-dark-surface rounded-lg border border-dark-border">
+             {!isFullscreen && (
+               <div className="flex items-center justify-center mb-1 sm:mb-4 p-2 bg-dark-surface rounded-lg border border-dark-border">
                <div className="flex items-center gap-2">
                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
                    playerColor === 'white' ? 'bg-gray-800' : 'bg-white'
@@ -180,9 +204,14 @@ export default function RoomPage() {
                  </div>
                </div>
              </div>
+             )}
             
             <div 
-              className="chessboard-container w-full aspect-square max-w-[280px] sm:max-w-[400px] md:max-w-[500px] mx-auto"
+              className={`chessboard-container w-full aspect-square mx-auto ${
+                isFullscreen 
+                  ? 'max-w-none max-h-[100vh] h-[100vh]' 
+                  : 'max-w-[280px] sm:max-w-[400px] md:max-w-[500px]'
+              }`}
               style={{ 
                 touchAction: 'none',
                 WebkitTapHighlightColor: 'transparent',
@@ -211,7 +240,8 @@ export default function RoomPage() {
             </div>
             
              {/* Current Player - Bottom */}
-             <div className="flex items-center justify-center mt-1 sm:mt-4 p-2 bg-dark-surface rounded-lg border border-dark-border">
+             {!isFullscreen && (
+               <div className="flex items-center justify-center mt-1 sm:mt-4 p-2 bg-dark-surface rounded-lg border border-dark-border">
                <div className="flex items-center gap-2">
                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
                    playerColor === 'white' ? 'bg-white' : 'bg-gray-800'
@@ -232,9 +262,11 @@ export default function RoomPage() {
                  </div>
                </div>
              </div>
+             )}
           </div>
 
-          <div className="w-full xl:w-80 bg-dark-surface rounded-lg p-3 border border-dark-border mt-2 xl:mt-0">
+          {!isFullscreen && (
+            <div className="w-full xl:w-80 bg-dark-surface rounded-lg p-3 border border-dark-border mt-2 xl:mt-0">
             <h3 className="text-base font-semibold text-dark-text mb-3">Game Info</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -271,6 +303,7 @@ export default function RoomPage() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 

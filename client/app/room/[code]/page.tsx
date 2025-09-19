@@ -76,12 +76,12 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* Fullscreen Toggle Button */}
-      {connected && gameState.gameStarted && (
-        <div className="fixed bottom-2 right-2 z-50 sm:hidden">
+      {/* Fullscreen Toggle Button - Shows on ALL mobile devices */}
+      {connected && (
+        <div className="fixed bottom-4 right-4 z-50 lg:hidden">
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-xl border border-gray-600 transition-all duration-300"
+            className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-2xl border-2 border-blue-400 transition-all duration-300 hover:scale-110"
           >
             {isFullscreen ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">

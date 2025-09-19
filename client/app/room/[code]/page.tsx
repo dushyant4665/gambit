@@ -48,7 +48,10 @@ export default function RoomPage() {
     const isCreator = createdRooms.includes(roomCode)
     const popupShown = localStorage.getItem(`popup_shown_${roomCode}`) === 'true'
     
-    if (isCreator && gameState.playerCount === 2 && gameState.gameStarted && !popupShown && !showGameOverPopup) {
+    console.log(`🔍 Popup check: isCreator=${isCreator}, playerCount=${gameState.playerCount}, gameStarted=${gameState.gameStarted}, popupShown=${popupShown}`)
+    
+    if (isCreator && gameState.playerCount === 2 && !popupShown && !showGameOverPopup) {
+      console.log('🎉 Showing player joined popup!')
       setShowPlayerJoinedPopup(true)
       localStorage.setItem(`popup_shown_${roomCode}`, 'true')
       setTimeout(() => setShowPlayerJoinedPopup(false), 3000)
@@ -80,8 +83,16 @@ export default function RoomPage() {
       {showPlayerJoinedPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-dark-surface p-6 rounded-lg border border-dark-border max-w-sm mx-4">
-            <h3 className="text-xl font-bold text-dark-text mb-2">Player Connected!</h3>
-            <p className="text-dark-text/70 mb-4">{gameState.playerNames.black} has joined the game. You can start playing!</p>
+            <h3 className="text-xl font-bold text-dark-text mb-2">Player 2 Connected!</h3>
+            <p className="text-dark-text/70 mb-4">
+              {gameState.playerNames.black || 'Player 2'} has joined the game. You can start playing!
+            </p>
+            <button 
+              onClick={() => setShowPlayerJoinedPopup(false)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            >
+              Got it!
+            </button>
           </div>
         </div>
       )}
@@ -120,7 +131,26 @@ export default function RoomPage() {
         </div>
       )}
       
-        <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50">
+        {/* Top Right Controls */}
+        <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 flex gap-2">
+          {/* Fullscreen Toggle Button */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="bg-gray-800 hover:bg-gray-700 text-white p-2 sm:p-3 rounded-lg shadow-xl border border-gray-600 transition-all duration-300 hover:scale-105"
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            {isFullscreen ? (
+              <svg width="18" height="18" className="sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+              </svg>
+            ) : (
+              <svg width="18" height="18" className="sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+              </svg>
+            )}
+          </button>
+          
+          {/* GitHub Icon */}
           <a 
             href="https://github.com/dushyant4665/gambit" 
             target="_blank" 
@@ -133,7 +163,7 @@ export default function RoomPage() {
           </a>
         </div>
       
-      <div className={`${isFullscreen ? 'fixed inset-0 bg-dark-bg z-40 flex items-center justify-center' : 'max-w-7xl mx-auto'}`}>
+      <div className={`${isFullscreen ? 'fixed inset-0 bg-dark-bg z-40 flex items-center justify-center p-4' : 'max-w-7xl mx-auto'}`}>
         {!isFullscreen && (
           <div className="text-center mb-1 sm:mb-6 px-2">
             <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-dark-text mb-1 sm:mb-2">Room: {roomCode}</h1>
@@ -160,8 +190,8 @@ export default function RoomPage() {
         </div>
         )}
 
-        <div className={`${isFullscreen ? 'w-full h-full flex items-center justify-center p-2' : 'flex flex-col xl:flex-row gap-2 lg:gap-6 items-start justify-center px-2'}`}>
-          <div className={`${isFullscreen ? 'w-full max-w-none aspect-square max-h-full' : 'flex-shrink-0 w-full max-w-[500px] mx-auto xl:mx-0'}`}>
+        <div className={`${isFullscreen ? 'w-full h-full flex items-center justify-center' : 'flex flex-col xl:flex-row gap-2 lg:gap-6 items-start justify-center px-2'}`}>
+          <div className={`${isFullscreen ? 'w-full max-w-[min(100vh,100vw)] aspect-square' : 'flex-shrink-0 w-full max-w-[500px] mx-auto xl:mx-0'}`}>
              {/* Opponent Player - Top */}
              {!isFullscreen && (
                <div className="flex items-center justify-center mb-1 sm:mb-4 p-2 bg-dark-surface rounded-lg border border-dark-border">
@@ -188,9 +218,9 @@ export default function RoomPage() {
              )}
             
             <div 
-              className={`chessboard-container w-full aspect-square mx-auto relative ${
+              className={`chessboard-container w-full aspect-square mx-auto ${
                 isFullscreen 
-                  ? 'max-w-none max-h-[100vh] h-[100vh]' 
+                  ? 'max-w-none h-full' 
                   : 'max-w-[280px] sm:max-w-[400px] md:max-w-[500px]'
               }`}
               style={{ 
@@ -199,22 +229,6 @@ export default function RoomPage() {
                 userSelect: 'none'
               }}
             >
-              {/* Fullscreen Toggle Button - Top Right Corner of Chess Board */}
-              <button
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="absolute top-2 right-2 z-50 bg-gray-800 hover:bg-gray-700 text-white p-2 rounded shadow-lg border border-gray-600 transition-all duration-200"
-                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-              >
-                {isFullscreen ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                  </svg>
-                )}
-              </button>
               <Chessboard
                 position={gameState.position}
                 onPieceDrop={handleDrop}

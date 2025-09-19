@@ -50,11 +50,6 @@ npm run dev
 
 Open http://localhost:3000
 
-## Deploy
-
-**Client**: Vercel (free tier)  
-**Server**: Render (free tier)  
-
 Connect GitHub repo to both platforms. Auto-deploys on push.
 
 ## Features

@@ -50,7 +50,7 @@ export default function RoomPage() {
     
     console.log(`🔍 Popup check: isCreator=${isCreator}, playerCount=${gameState.playerCount}, gameStarted=${gameState.gameStarted}, popupShown=${popupShown}`)
     
-    if (isCreator && gameState.playerCount === 2 && !popupShown && !showGameOverPopup) {
+    if (isCreator && gameState.playerCount === 2 && gameState.gameStarted && !popupShown && !showGameOverPopup) {
       console.log('🎉 Showing player joined popup!')
       setShowPlayerJoinedPopup(true)
       localStorage.setItem(`popup_shown_${roomCode}`, 'true')
@@ -241,7 +241,7 @@ export default function RoomPage() {
                 customSquareStyles={getSquareStyles()}
                 areArrowsAllowed={false}
                 showBoardNotation={true}
-                animationDuration={0}
+                animationDuration={200}
                 snapToCursor={true}
                 customBoardStyle={{
                   borderRadius: '8px',

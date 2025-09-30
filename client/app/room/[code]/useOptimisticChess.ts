@@ -1,421 +1,295 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { socketManager } from '../../../lib/socket'
-import { SimpleChess } from './SimpleChess'
-import type { Socket } from 'socket.io-client'
+'use client'
 
-interface ChessGameState {
+import { useState, useEffect, useCallback } from 'react'
+import { socketManager } from '../../../lib/socket'
+import { Chess } from 'chess.js'
+
+interface GameState {
   position: string
-  activeColor: 'w' | 'b'
-  gameStatus: string
-  moveCount: number
-  playerCount: number
   gameStarted: boolean
+  gameStatus: 'waiting' | 'ongoing' | 'check' | 'checkmate' | 'stalemate' | 'draw'
+  activeColor: 'w' | 'b'
+  moveCount: number
   playerNames: {
     white: string
     black: string
   }
+  playerCount: number
 }
 
 export function useOptimisticChess(roomCode: string) {
-  const engineRef = useRef<SimpleChess>(new SimpleChess())
-  
-  const canonicalFenRef = useRef<string>('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
-  const lastAppliedMoveId = useRef<string>('')
-  
-  const optimisticMovePending = useRef<{from: string, to: string, tempId: string} | null>(null)
-  
-  const [gameState, setGameState] = useState<ChessGameState>({
-    position: canonicalFenRef.current,
-    activeColor: 'w',
-    gameStatus: 'waiting',
-    moveCount: 0,
-    playerCount: 1,
+  const [gameState, setGameState] = useState<GameState>({
+    position: 'start',
     gameStarted: false,
-    playerNames: { white: 'Player 1', black: 'Player 2' }
+    gameStatus: 'waiting',
+    activeColor: 'w',
+    moveCount: 0,
+    playerNames: { white: 'Player 1', black: 'Player 2' },
+    playerCount: 0
   })
   
-  const [isPlayerTurn, setIsPlayerTurn] = useState(false)
-  const [playerColor, setPlayerColor] = useState<'white' | 'black'>('white')
   const [connected, setConnected] = useState(false)
-  
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null)
   const [legalMoves, setLegalMoves] = useState<string[]>([])
-  
-  const socketRef = useRef<Socket | null>(null)
-  const isCreatorRef = useRef(false)
+  const [isPending, setIsPending] = useState(false)
+  const [chess] = useState(new Chess())
+  const [playerColor, setPlayerColor] = useState<'white' | 'black'>('white')
+
+  const isPlayerTurn = gameState.activeColor === (playerColor === 'white' ? 'w' : 'b')
 
   useEffect(() => {
     const socket = socketManager.connect()
-    socketRef.current = socket
-    
+    setConnected(true)
+
+    // Join the room
     const createdRooms = JSON.parse(localStorage.getItem('createdRooms') || '[]')
     const isCreator = createdRooms.includes(roomCode)
-    const playerName = localStorage.getItem(`player_name_${roomCode}`) || 'Anonymous'
     
-    isCreatorRef.current = isCreator
-    setPlayerColor(isCreator ? 'white' : 'black')
+    console.log(`🚀 Joining room: ${roomCode}, isCreator: ${isCreator}`)
+    
+    const storedName = localStorage.getItem(`player_name_${roomCode}`)
+    const playerName = storedName && storedName.trim().length > 0
+      ? storedName.trim()
+      : (isCreator ? 'Player 1' : 'Player 2')
 
-    const handleConnect = () => {
-      setConnected(true)
-      console.log('🔌 Socket connected, joining room...')
-      socket.emit('join-room', {
-        roomCode: roomCode.toUpperCase(),
-        playerName,
-        isCreator
-      })
-    }
+    socket.emit('join-room', {
+      roomCode,
+      playerName,
+      isCreator
+    })
 
-    const handleGameState = (data: any) => {
-      console.log('📡 Game state received:', data)
+    // Listen for game state updates
+    socket.on('game-state', (data) => {
+      console.log(`📊 Game state received:`, data)
+      setGameState(prev => ({
+        ...prev,
+        position: data.fen,
+        gameStarted: data.gameStarted,
+        gameStatus: data.gameStatus,
+        activeColor: data.activeColor,
+        moveCount: data.moveCount,
+        playerNames: data.playerNames,
+        playerCount: data.playerCount
+      }))
       
-      canonicalFenRef.current = data.fen
-      engineRef.current.setPosition(data.fen)
+      // Update chess.js position
+      chess.load(data.fen)
+      updateLegalMoves()
       
-      if (!optimisticMovePending.current) {
-        setGameState({
-          position: data.fen,
-          activeColor: data.activeColor,
-          gameStatus: data.gameStatus,
-          moveCount: data.moveCount,
-          playerCount: data.playerCount,
-          gameStarted: data.gameStarted,
-          playerNames: data.playerNames
-        })
+      // Set player color if not already set
+      if (!playerColor || playerColor === 'white') {
+        const createdRooms = JSON.parse(localStorage.getItem('createdRooms') || '[]')
+        const isCreator = createdRooms.includes(roomCode)
+        if (isCreator) {
+          setPlayerColor('white')
+        } else if (data.playerCount === 2) {
+          setPlayerColor('black')
+        }
       }
+    })
 
-      const isWhiteTurn = data.activeColor === 'w'
-      const canMove = (isCreator ? isWhiteTurn : !isWhiteTurn) && data.gameStarted && !optimisticMovePending.current
-      setIsPlayerTurn(canMove)
-      
-      console.log(`📊 Turn state: activeColor=${data.activeColor}, canMove=${canMove}, isCreator=${isCreator}`)
-    }
-
-    const handleRoomStarted = (data: any) => {
-      console.log('🚀 ROOM STARTED EVENT:', data)
-      
-      canonicalFenRef.current = data.fen || canonicalFenRef.current
-      engineRef.current.setPosition(canonicalFenRef.current)
-      
+    // Listen for room started event
+    socket.on('room:started', (data) => {
+      console.log(`🎉 Room started:`, data)
       setGameState(prev => ({
         ...prev,
         gameStarted: true,
-        playerCount: 2,
+        gameStatus: 'ongoing',
         playerNames: data.playerNames,
-        activeColor: data.turn,
-        position: canonicalFenRef.current
+        playerCount: 2
       }))
-
-      const isWhiteTurn = data.turn === 'w'
-      const canMove = (isCreator ? isWhiteTurn : !isWhiteTurn)
-      setIsPlayerTurn(canMove)
       
-      if (data.playerNames?.black && isCreator) {
-        // voiceAnnounce.playerJoined(data.playerNames.black, 'black')
+      // Determine player color based on socket ID
+      const socket = socketManager.getSocket()
+      if (socket) {
+        const isWhite = socket.id === data.whiteId
+        setPlayerColor(isWhite ? 'white' : 'black')
+        console.log(`🎯 Player color set to: ${isWhite ? 'white' : 'black'}`)
       }
-      
-      console.log(`🎯 ROOM STARTED - White can move: ${canMove}, isCreator: ${isCreator}`)
-    }
+    })
 
-    const handleMoveConfirmed = (data: any) => {
-      console.log('✅ Move confirmed:', data)
-      
-      if (optimisticMovePending.current && 
-          optimisticMovePending.current.from === data.from && 
-          optimisticMovePending.current.to === data.to) {
-        
-        console.log('✅ Our optimistic move confirmed - clearing pending')
-        optimisticMovePending.current = null
-        lastAppliedMoveId.current = data.moveId
-        
-        canonicalFenRef.current = data.fen
-        engineRef.current.setPosition(data.fen)
-        
-        setGameState(prev => ({
-          ...prev,
-          position: data.fen,
-          activeColor: data.activeColor,
-          gameStatus: data.isCheckmate ? 'checkmate' : 
-                     data.isStalemate ? 'stalemate' : 
-                     data.isCheck ? 'check' : 'ongoing',
-          moveCount: data.moveNumber
-        }))
-        
-        const isWhiteTurn = data.activeColor === 'w'
-        const canMove = (isCreatorRef.current ? isWhiteTurn : !isWhiteTurn) && 
-                       !data.isCheckmate && !data.isStalemate
-        setIsPlayerTurn(canMove)
-        
-        if (data.isCheckmate) {
-          const winner = data.color === 'w' ? 'white' : 'black'
-          // voiceAnnounce.checkmate(winner)
-        } else if (data.isStalemate) {
-          // voiceAnnounce.stalemate()
-        } else if (data.isCheck) {
-          const checkedColor = data.activeColor === 'w' ? 'white' : 'black'
-          // voiceAnnounce.check(checkedColor)
-        }
-        
-        return
-      }
-      
-      console.log('📨 Opponent move - applying incrementally')
-      
-      canonicalFenRef.current = data.fen
-      
-      engineRef.current.setPosition(data.fen)
-      
+    // Listen for move confirmations
+    socket.on('move:confirmed', (data) => {
+      setIsPending(false)
       setGameState(prev => ({
         ...prev,
         position: data.fen,
         activeColor: data.activeColor,
-        gameStatus: data.isCheckmate ? 'checkmate' : 
-                   data.isStalemate ? 'stalemate' : 
-                   data.isCheck ? 'check' : 'ongoing',
-        moveCount: data.moveNumber
+        moveCount: data.moveNumber,
+        gameStatus: data.gameStatus
       }))
       
-      const isWhiteTurn = data.activeColor === 'w'
-      const canMove = (isCreatorRef.current ? isWhiteTurn : !isWhiteTurn) && 
-                     !data.isCheckmate && !data.isStalemate
-      setIsPlayerTurn(canMove)
-      
-      const piece = data.piece || 'piece'
-      const isCapture = data.capturedPiece || data.san?.includes('x')
-      
-      // voiceAnnounce.move(piece, data.from, data.to, isCapture)
-      
-      if (data.san?.includes('O-O-O')) {
-        // voiceAnnounce.castling('queenside')
-      } else if (data.san?.includes('O-O')) {
-        // voiceAnnounce.castling('kingside')
-      }
-      
-      if (data.promotion) {
-        // voiceAnnounce.promotion(data.color + data.promotion, data.to)
-      }
-      
-      if (data.isCheckmate) {
-        const winner = data.color === 'w' ? 'white' : 'black'
-        // voiceAnnounce.checkmate(winner)
-      } else if (data.isStalemate) {
-        // voiceAnnounce.stalemate()
-      } else if (data.isCheck) {
-        const checkedColor = data.activeColor === 'w' ? 'white' : 'black'
-        // voiceAnnounce.check(checkedColor)
-      } else if (!data.isCheckmate && !data.isStalemate) {
-        setTimeout(() => {
-          const nextColor = data.activeColor === 'w' ? 'white' : 'black'
-          // voiceAnnounce.turnChange(nextColor)
-        }, 1500)
-      }
-      
-      lastAppliedMoveId.current = data.moveId
-    }
-
-    const handleMoveError = (data: any) => {
-      console.log('❌ Move rejected by server:', data.error)
-      
-      if (optimisticMovePending.current) {
-        console.log('🔄 Rolling back optimistic move')
-        
-        engineRef.current.setPosition(canonicalFenRef.current)
-        
-        setGameState(prev => ({
-          ...prev,
-          position: canonicalFenRef.current,
-          activeColor: engineRef.current.getActiveColor()
-        }))
-        
-        optimisticMovePending.current = null
-      }
-      
-      const isWhiteTurn = engineRef.current.getActiveColor() === 'w'
-      const canMove = (isCreatorRef.current ? isWhiteTurn : !isWhiteTurn) && gameState.gameStarted
-      setIsPlayerTurn(canMove)
-      
+      chess.load(data.fen)
+      updateLegalMoves()
       setSelectedSquare(null)
-      setLegalMoves([])
-    }
+    })
 
-    const handleDisconnect = () => {
+    // Listen for move errors
+    socket.on('move-error', (data) => {
+      setIsPending(false)
+      console.error('Move error:', data.error)
+    })
+
+    socket.on('error', (data) => {
+      console.error('❌ Server error:', data.message)
+    })
+
+    socket.on('connect', () => {
+      setConnected(true)
+    })
+
+    socket.on('disconnect', () => {
       setConnected(false)
-      setIsPlayerTurn(false)
-    }
-
-    socket.on('connect', handleConnect)
-    socket.on('game-state', handleGameState)
-    socket.on('room:started', handleRoomStarted)
-    socket.on('move:confirmed', handleMoveConfirmed)
-    socket.on('move-error', handleMoveError)
-    socket.on('disconnect', handleDisconnect)
-
-    if (socket.connected) {
-      handleConnect()
-    }
+    })
 
     return () => {
-      socket.off('connect', handleConnect)
-      socket.off('game-state', handleGameState)
-      socket.off('room:started', handleRoomStarted)
-      socket.off('move:confirmed', handleMoveConfirmed)
-      socket.off('move-error', handleMoveError)
-      socket.off('disconnect', handleDisconnect)
+      socket.disconnect()
     }
-  }, [roomCode, gameState.gameStarted])
+  }, [roomCode, chess])
+
+  const updateLegalMoves = useCallback(() => {
+    console.log(`🔄 updateLegalMoves: isPlayerTurn=${isPlayerTurn}, gameStarted=${gameState.gameStarted}`)
+    if (isPlayerTurn && gameState.gameStarted && connected) {
+      const moves = chess.moves({ verbose: true })
+      const legalMoveSquares = moves.map(move => move.to)
+      console.log(`📋 Legal moves:`, legalMoveSquares)
+      setLegalMoves(legalMoveSquares)
+    } else {
+      console.log(`❌ No legal moves: isPlayerTurn=${isPlayerTurn}, gameStarted=${gameState.gameStarted}, connected=${connected}`)
+      setLegalMoves([])
+    }
+  }, [chess, isPlayerTurn, gameState.gameStarted, connected])
 
   const handleSquareClick = useCallback((square: string) => {
-    if (gameState.gameStatus === 'checkmate' || gameState.gameStatus === 'stalemate' || gameState.gameStatus === 'draw') {
+    console.log(`🎯 Square clicked: ${square}`)
+    console.log(`🔍 Conditions: gameStarted=${gameState.gameStarted}, isPlayerTurn=${isPlayerTurn}, isPending=${isPending}, connected=${connected}`)
+    
+    if (!gameState.gameStarted || !isPlayerTurn || isPending || !connected) {
+      console.log(`❌ Move blocked: gameStarted=${gameState.gameStarted}, isPlayerTurn=${isPlayerTurn}, isPending=${isPending}, connected=${connected}`)
       return
     }
-    
-    if (!isPlayerTurn || !gameState.gameStarted || optimisticMovePending.current) return
-
-    console.log(`🎯 Square clicked: ${square}`)
 
     if (selectedSquare === square) {
+      console.log(`🔄 Deselecting square: ${square}`)
       setSelectedSquare(null)
       setLegalMoves([])
       return
     }
 
-    if (selectedSquare && legalMoves.includes(square)) {
-      makeMove(selectedSquare, square)
-      return
-    }
-
-    const moves = engineRef.current.getBasicLegalMoves(square)
-    if (moves.length > 0) {
+    const piece = chess.get(square as any)
+    console.log(`♟️ Piece at ${square}:`, piece)
+    
+    const expectedColor = playerColor === 'white' ? 'w' : 'b'
+    if (piece && piece.color === expectedColor) {
+      console.log(`✅ Selecting ${playerColor} piece at ${square}`)
       setSelectedSquare(square)
-      setLegalMoves(moves)
-      console.log(`📱 Selected ${square}, legal moves:`, moves)
+      // Get legal moves for this specific piece
+      const moves = chess.moves({ square: square as any, verbose: true })
+      const legalMoveSquares = moves.map(move => move.to)
+      setLegalMoves(legalMoveSquares)
+      console.log(`📋 Legal moves for ${square}:`, legalMoveSquares)
+    } else if (selectedSquare && legalMoves.includes(square)) {
+      console.log(`🚀 Making move: ${selectedSquare} -> ${square}`)
+      makeMove(selectedSquare, square)
     } else {
-      setSelectedSquare(null)
-      setLegalMoves([])
+      console.log(`❌ Invalid selection: piece=${piece}, selectedSquare=${selectedSquare}, legalMoves=${legalMoves}`)
     }
-  }, [isPlayerTurn, gameState.gameStarted, selectedSquare, legalMoves])
+  }, [selectedSquare, gameState.gameStarted, isPlayerTurn, isPending, chess, legalMoves, updateLegalMoves, playerColor])
 
-  const handleDrop = useCallback((sourceSquare: string, targetSquare: string) => {
-    console.log(`🎯 Piece dropped: ${sourceSquare} → ${targetSquare}`)
+  const makeMove = useCallback((from: string, to: string) => {
+    console.log(`🚀 makeMove called: ${from} -> ${to}`)
+    console.log(`🔍 makeMove conditions: gameStarted=${gameState.gameStarted}, isPlayerTurn=${isPlayerTurn}, isPending=${isPending}, connected=${connected}`)
     
-    if (!isPlayerTurn || !gameState.gameStarted || !connected || optimisticMovePending.current) {
-      console.log('❌ Drop rejected: not ready or move pending')
-      return false
+    if (!gameState.gameStarted || !isPlayerTurn || isPending || !connected) {
+      console.log(`❌ makeMove blocked`)
+      return
     }
 
-    return makeMove(sourceSquare, targetSquare)
-  }, [isPlayerTurn, gameState.gameStarted, connected])
-
-  const makeMove = useCallback((from: string, to: string, promotion?: string): boolean => {
-    const socket = socketRef.current
-    if (!socket || !connected || !isPlayerTurn || optimisticMovePending.current) {
-      return false
-    }
-
-    if (!engineRef.current.isBasicValidMove(from, to)) {
-      console.log('❌ Invalid move - basic validation failed')
-      return false
-    }
-
-    console.log(`🚀 Making optimistic move: ${from} → ${to}`)
-
-    const currentPosition = engineRef.current.getPosition()
-    const pieces = engineRef.current.parseBoard()
-    const fromCol = from.charCodeAt(0) - 97
-    const fromRow = 8 - parseInt(from[1])
-    const toCol = to.charCodeAt(0) - 97
-    const toRow = 8 - parseInt(to[1])
-    const movingPiece = pieces[fromRow][fromCol]
-    const capturedPiece = pieces[toRow][toCol]
-
-    const canonicalFenBeforeMove = canonicalFenRef.current
+    // Check if move is legal first
+    const legalMoves = chess.moves({ square: from as any, verbose: true })
+    const isLegalMove = legalMoves.some(move => move.to === to)
     
-    const newPosition = engineRef.current.applyMove(from, to, promotion)
-    
-    if (movingPiece) {
-      const isCapture = !!capturedPiece
-      // voiceAnnounce.move(movingPiece, from, to, isCapture)
-      
-      if (movingPiece.toLowerCase().endsWith('p') && promotion) {
-        // voiceAnnounce.promotion(playerColor[0] + promotion, to)
-      }
-      
-      if (movingPiece.toLowerCase().endsWith('k') && Math.abs(fromCol - toCol) === 2) {
-        const side = toCol > fromCol ? 'kingside' : 'queenside'
-        // voiceAnnounce.castling(side)
-      }
+    if (!isLegalMove) {
+      console.log(`❌ Move ${from} to ${to} is not legal`)
+      return
     }
+
+    console.log(`✅ Move successful, sending to server with roomCode: ${roomCode}`)
+    setIsPending(true)
     
-    requestAnimationFrame(() => {
-      setGameState(prev => ({
-        ...prev,
-        position: newPosition,
-        activeColor: prev.activeColor === 'w' ? 'b' : 'w',
-        moveCount: prev.moveCount + 1
-      }))
-    })
+    // Emit move to server
+    const socket = socketManager.getSocket()
+    if (socket && roomCode) {
+      console.log(`📡 Emitting make-move to server`)
+      socket.emit('make-move', {
+        roomCode,
+        from,
+        to,
+        promotion: 'q'
+      })
+    } else {
+      console.log(`❌ Cannot send move: socket=${!!socket}, roomCode=${roomCode}`)
+      setIsPending(false)
+    }
+  }, [gameState.gameStarted, isPlayerTurn, isPending, connected, chess, roomCode])
 
-    const tempId = `${Date.now()}_${Math.random()}`
-    optimisticMovePending.current = { from, to, tempId }
+  const handleDrop = useCallback((sourceSquare: string, targetSquare: string, _piece?: string): boolean => {
+    if (!gameState.gameStarted || !isPlayerTurn || isPending || !connected) return false
 
-    setIsPlayerTurn(false)
-    setSelectedSquare(null)
-    setLegalMoves([])
+    // Validate using chess.js before sending
+    const legalMoves = chess.moves({ square: sourceSquare as any, verbose: true })
+    const chosenMove = legalMoves.find(m => m.to === targetSquare)
+    if (!chosenMove) return false
 
-    socket.emit('make-move', {
-      roomCode: roomCode.toUpperCase(),
-      from,
-      to,
-      promotion
-    })
+    setIsPending(true)
 
-    console.log(`✅ Optimistic move applied: ${from} → ${to}`)
-    return true
-  }, [connected, isPlayerTurn, roomCode, playerColor])
+    // Emit move to server
+    const socket = socketManager.getSocket()
+    if (socket) {
+      socket.emit('make-move', {
+        roomCode,
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: chosenMove.promotion || 'q'
+      })
+      return true
+    }
+
+    setIsPending(false)
+    return false
+  }, [gameState.gameStarted, isPlayerTurn, isPending, connected, chess, roomCode])
 
   const getSquareStyles = useCallback(() => {
-    const styles: { [square: string]: React.CSSProperties } = {}
-    
+    const styles: Record<string, any> = {}
+
     if (selectedSquare) {
       styles[selectedSquare] = {
-        backgroundColor: 'rgba(59, 130, 246, 0.6)',
-        boxShadow: 'inset 0 0 0 3px rgba(59, 130, 246, 0.8)'
+        background: 'rgba(255, 255, 0, 0.4)',
+        borderRadius: '50%'
       }
-    }
-    
-    for (const square of legalMoves) {
-      styles[square] = {
-        background: 'radial-gradient(circle, rgba(107, 114, 128, 0.7) 25%, transparent 25%)',
-        cursor: 'pointer'
-      }
-    }
-    
-    if (optimisticMovePending.current) {
-      const pendingSquare = optimisticMovePending.current.to
-      if (styles[pendingSquare]) {
-        styles[pendingSquare] = {
-          ...styles[pendingSquare],
-          opacity: 0.8
-        }
-      } else {
-        styles[pendingSquare] = {
-          opacity: 0.8,
-          backgroundColor: 'rgba(255, 255, 0, 0.2)'
-        }
-      }
-    }
-    
-    return styles
-  }, [selectedSquare, legalMoves])
 
-  const isDraggablePiece = useCallback(({ piece }: { piece: string }) => {
-    if (gameState.gameStatus === 'checkmate' || gameState.gameStatus === 'stalemate' || gameState.gameStatus === 'draw') {
-      return false
+      legalMoves.forEach(square => {
+        if (chess.get(square as any)) {
+          styles[square] = {
+            background: 'radial-gradient(circle, rgba(0,0,0,.1) 85%, transparent 85%)',
+            borderRadius: '50%'
+          }
+        } else {
+          styles[square] = {
+            background: 'radial-gradient(circle, rgba(0,0,0,.1) 25%, transparent 25%)',
+            borderRadius: '50%'
+          }
+        }
+      })
     }
-    
-    if (!gameState.gameStarted || !isPlayerTurn || !connected || optimisticMovePending.current) return false
-    const pieceColor = piece[0] === 'w' ? 'white' : 'black'
-    return pieceColor === playerColor
-  }, [gameState.gameStarted, gameState.gameStatus, isPlayerTurn, connected, playerColor])
+
+    return styles
+  }, [selectedSquare, legalMoves, chess])
+
+  const isDraggablePiece = useCallback(({ piece }: { piece: string, sourceSquare: string }) => {
+    const expectedColor = playerColor === 'white' ? 'w' : 'b'
+    return !!(gameState.gameStarted && isPlayerTurn && !isPending && connected && piece && typeof piece === 'string' && piece.startsWith(expectedColor))
+  }, [gameState.gameStarted, isPlayerTurn, isPending, connected, playerColor])
 
   return {
     gameState,
@@ -429,6 +303,6 @@ export function useOptimisticChess(roomCode: string) {
     getSquareStyles,
     isDraggablePiece,
     makeMove,
-    isPending: !!optimisticMovePending.current
+    isPending
   }
 }
